@@ -1,0 +1,175 @@
+---
+title: "Introduction to Representational Similarity Analysis"
+author: "Chris Cox"
+bibliography: rsa-references.bib
+csl: apa.csl
+---
+---
+nocite: |
+    @Dujmovic2022, @DimsdaleZucker2018, @Kriegeskorte2008, @Nili2014, |
+    @Diedrichsen2017, @Cai2019, @Kaniuth2022, @Friston2019, @Keshavarz2024
+---
+
+
+## What is Representational Similarity Analysis (RSA)?
+
+There are many very good papers written about the logic, strengths, and weaknesses of RSA. It is worth digging into them. One of may many languishing projects writing another paper in this vein...
+
+RSA boils down to a comparison of similarity or dissimilarity (i.e., distance) matrices. Similarity (and dissimilarity) matrices are *symmetric*, meaning that `x[i,j] == x[j,i]` is `TRUE` for all `i` and `j`. All values along the *diagonal* of a dissimilarity matrix (i.e., whenever `i==j`) will be zero. For similarity matrices useful for RSA, such as correlation matrices or cosine similarity matrices, the diagonal values will always be one.[^covariance]
+
+[^covariance]: A covariance matrix is an example of a similarity matrix that does not have ones on the diagonal. Instead, it has the item variances on the diagonal.
+
+
+### Exploring similarity and distance matrices
+
+Let's load some packages and a selection of data packaged with R that to utilize for a demonstration:
+
+```{r generate symmetric matrices}
+library(dplyr, warn.conflicts = FALSE)
+library(purrr)
+library(tibble)
+library(tidyr)
+library(ggplot2)
+
+data("mtcars")
+x <-  mtcars[, c(1,3,4,5,6,7)]
+knitr::kable(x, digits = 1)
+```
+
+
+I add a little noise to the data to reduce the similarity among items. Then I compute three matrices: a correlation _similarity_ matrix, a correlation _distance_ matrix (i.e., dissimilarity), and a Euclidean distance matrix.
+
+```{r}
+e <- matrix(
+    rnorm(nrow(x) * ncol(x), sd = apply(x, 2, sd)),
+    nrow = nrow(x),
+    ncol = ncol(x),
+    byrow = TRUE
+)
+matrices <- list(
+    similarity = cor(t(x + e)),
+    dissimilar = (2 - (cor(t(x + e)) + 1)) / 2,
+    distance = as.matrix(dist(x + e))
+)
+```
+
+To plot these matrices with `ggplot`, I will represent them as `tibble`s (which are just `data.frame`s with some conveniences baked in):
+
+```{r matrix to tibble}
+d <- map(matrices, ~ {
+    .x |>
+        as_tibble(rownames = "carA") |>
+        pivot_longer(
+            cols = -carA,
+            names_to = "carB",
+            values_to = "value"
+        )
+}) |>
+    list_rbind(names_to = "metric") |>
+    mutate(
+        metric = factor(
+            metric,
+            levels = c("similarity", "dissimilar", "distance"),
+            labels = c(
+                "correlation (similarity)",
+                "correlation distance",
+                "Euclidean distance"
+            )
+        ),
+        across(c(carA, carB), ~ factor(.x, levels = rownames(x)))
+    )
+```
+
+I will also define a logical matrix that can be used as a filter to select the lower triangle of each of these matrices as:
+
+```{r lower triangle}
+lt <- lower.tri(matrices$similarity)
+```
+
+Now I will plot the correlation similarity and distance matrices:
+
+```{r plot similarity/dissimilarity matrices}
+d |>
+    filter(metric != "Euclidean distance") |>
+    ggplot(aes(x = carA, y = carB, fill = value)) +
+        geom_raster() +
+        scale_fill_gradient2() +
+        theme(
+            axis.title.y = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank()
+        ) +
+        facet_wrap(vars(metric))
+```
+
+Notice that the two express the same patterns of similarity, but inverted and on different scales. Indeed, the correlation between the lower triangles of the two matrices is -1:
+
+```{r correlation}
+cor(matrices$similarity[lt], matrices$dissimilar[lt])
+```
+
+Distances cannot be negative, so 0 is the bottom of the scale for the correlation distance matrix.
+
+Now I will plot the Euclidean distance:
+
+```{r plot distance matrix}
+d |>
+    filter(metric == "Euclidean distance") |>
+    ggplot(aes(x = carA, y = carB, fill = value)) +
+        geom_raster() +
+        scale_fill_gradient() +
+        theme(
+            axis.title.y = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank()
+        ) +
+    facet_wrap(vars(metric))
+```
+
+
+::: {.callout-note}
+Notice that the Euclidean distances among items do not convey the same structure as the matrices above:
+
+```{r correlation matrix}
+imap(matrices, ~ tibble(.y := .x[lt])) |>
+    list_cbind() |>
+    cor() |>
+    knitr::kable(digits = 3)
+```
+
+Why is this? Reflect on the differences between how correlation and Euclidean distance are computed. In the following equations, $x$ and $y$ refer to different items like `Honda Civic` and `Fiat 128`, and the numbers iterate over features like `mpg` (miles per gallon), and `hp` (horsepower)).
+
+$$
+\textrm{Euclidean Dist.} = \sqrt{\sum(x_i - y_i)^2}
+$$
+$$
+\textrm{Pearson's } r = \frac{\sum(x_i-\bar{x})(y_i-\bar{y})}{\sqrt{\sum(x_i - \bar{x})^2\sum(y_i-\bar{y})^2}}
+$$
+
+First, notice that the correlation subtracts the mean from each vector. While its not as obvious in the formulation above, we could also think about Pearson's $r$ as:
+
+$$
+\begin{align}
+\textrm{Pearson's } r &= \frac{\sum z(x)_i-z(y)_i}{n-1} \\
+z(a)_i &= \frac{a_i - \bar{a}}{s(a)} \\
+s(a) &= \sqrt{\frac{\sum a_i - \bar{a}}{n-1}}
+\end{align}
+$$
+
+In other words, each variable is also standardized so that the vectors being correlated both have standard deviation equal to one (i.e., "unit variance"). It is important to consider what structure and relationships are being emphasized by the choice of similarity or distance metric.
+
+:::
+
+
+While similarity and dissimilarity matrices have some important differences when considering relationships among items, when focusing on the mechanics of RSA they are interchangeable. From this point on, in the interest of brevity, I will write "similarity matrix" and not explicitly mention dissimilarity (or distance) matrices.
+
+
+## What does RSA tell you?
+
+RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triang similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
+
+## A short selection of papers on RSA
+::: {#refs}
+:::

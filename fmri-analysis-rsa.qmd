@@ -168,7 +168,7 @@ While similarity and dissimilarity matrices have some important differences when
 
 ## What does RSA tell you?
 
-RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triang similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
+RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triangle similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
 
 ## A short selection of papers on RSA
 ::: {#refs}

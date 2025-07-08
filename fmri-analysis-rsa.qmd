@@ -166,7 +166,95 @@ In other words, each variable is also standardized so that the vectors being cor
 While similarity and dissimilarity matrices have some important differences when considering relationships among items, when focusing on the mechanics of RSA they are interchangeable. From this point on, in the interest of brevity, I will write "similarity matrix" and not explicitly mention dissimilarity (or distance) matrices.
 
 
-## What does RSA tell you?
+## First example
+
+<<<<<<< HEAD
+RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triangle similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
+=======
+Let's simulate some data to make things more concrete. First, I will generate the "true structure": three independent dimensions of variability that characterize 100 items.
+
+```{r E1 true signal}
+x <- matrix(
+    rnorm(300),
+    nrow = 100,
+    ncol = 3,
+    dimnames = list(
+        items = NULL,
+        dimensions = NULL
+    )
+)
+
+print(x[1:10, ])
+```
+
+::: {.callout-note}
+How can three random vectors be "structure"? While it is true that there is no interesting topology to the 100 points, they are still 100 points in space, each with some similarity/distance relative to every other point. As long as these positions are systematic, in that different attempts to measure these points will result in them being positioned similarly in space, that's all we need in order to say there is structure.
+:::
+
+The true 3D-structure will be a part of the matrices to which we will apply RSA. First, we'll create some "MRI data" by:
+
+    1. Replicating the columns
+    2. Adding some noise on top of the true signal
+    3. Appending some completely unrelated columns
+
+```{r E1 fmri data}
+e <- matrix(rnorm(300 * 10, sd = 2), nrow = 100, ncol = 3 * 10)
+xe <- matrix(c(x) + c(e), nrow = 100, ncol = 3 * 10)
+E <- matrix(rnorm(300 * 10, sd = 2), nrow = 100, ncol = 3 * 10)
+X <- cbind(xe, E)
+
+print(dim(X))
+```
+
+::: {.callout-warning}
+In the code above, I leverage the facts that `R` will recycle the shorter vector to match the longer one (assuming the length of the longer one is multiple of the shorter one) and that matrices are populated one column at a time by default. For example:
+
+```{r matrix columnwise population}
+matrix(1:6, nrow = 3, ncol = 2)
+```
+:::
+
+We'll say `X` is the "fMRI data". There are 60 voxels in total. The former 30 carry signal, and the latter 30 are completely unrelated to the true 3D structure. The first voxel is derived from the first dimension of the the true structure, the second is derived from the second dimension of the true structure, and likewise for the third. This pattern repeats 10 times.
+
+Now, we can define the target representational similarity matrix (RSM) as the pairwise correlations among items. The correlation between two items is defined as their shared variability in 3D space.
+
+```{r }
+y <- cor(t(x))
+```
+
+Just to drive home the consequence of this decision to use correlation, rather than say Euclidean distance, consider the following:
+
+```{r }
+cor_dist <- function(x) {
+    r <- cor(x)
+    (2 - (r + 1)) / 2
+}
+std_dist <- function(x) {
+    d <- as.matrix(dist(x))
+    d / max(d)
+}
+y <- rbind(
+    A = c( 1,  3,  2),
+    B = c(-3, -1, -2),
+    C = c( 0,  1,  1)
+)
+cor_dist(t(y))
+std_dist(y)
+
+```
+
+```{r }
+lt <- lower.tri(y)
+cor(dist(x[, 1]), cor(t(X[, seq(1, 30, by = 3)]))[lt])
+
+
+X1d <- map(seq(1, 30, by = 3), ~ c(dist(X[, .x]))) |>
+    do.call(rbind, args = _) |>
+    colMeans()
+
+cor(dist(x[, 1]), X1d)
+
+```
 
 RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triangle similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
 

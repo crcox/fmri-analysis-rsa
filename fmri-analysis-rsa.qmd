@@ -168,9 +168,6 @@ While similarity and dissimilarity matrices have some important differences when
 
 ## First example
 
-<<<<<<< HEAD
-RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triangle similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
-=======
 Let's simulate some data to make things more concrete. First, I will generate the "true structure": three independent dimensions of variability that characterize 100 items.
 
 ```{r E1 true signal}
@@ -198,9 +195,10 @@ The true 3D-structure will be a part of the matrices to which we will apply RSA.
     3. Appending some completely unrelated columns
 
 ```{r E1 fmri data}
-e <- matrix(rnorm(300 * 10, sd = 2), nrow = 100, ncol = 3 * 10)
+noise_sd <- 1
+e <- matrix(rnorm(300 * 10, sd = noise_sd), nrow = 100, ncol = 3 * 10)
 xe <- matrix(c(x) + c(e), nrow = 100, ncol = 3 * 10)
-E <- matrix(rnorm(300 * 10, sd = 2), nrow = 100, ncol = 3 * 10)
+E <- matrix(rnorm(300 * 10, sd = noise_sd), nrow = 100, ncol = 3 * 10)
 X <- cbind(xe, E)
 
 print(dim(X))
@@ -215,6 +213,109 @@ matrix(1:6, nrow = 3, ncol = 2)
 :::
 
 We'll say `X` is the "fMRI data". There are 60 voxels in total. The former 30 carry signal, and the latter 30 are completely unrelated to the true 3D structure. The first voxel is derived from the first dimension of the the true structure, the second is derived from the second dimension of the true structure, and likewise for the third. This pattern repeats 10 times.
+
+I set the standard deviation of the noise to be 1, which is equal to the standard deviation all three dimensions of "signal". In other words, the signal to noise ratio is 1:1 for any signal-carrying voxel.
+
+::: {.callout-idea}
+
+We know the signal to noise ratio exactly since this is a simulation. But thinking about real data in terms of potential sources of variance is very helpful, even if you do not know what they all are.
+
+:::
+
+You might think that a situation where the noise has the same intensity as the signal as hopeless, but there are two reasons why it is not.
+
+ 1. We are interested in how this structure correlates with a target structure, which means that even if half of the variance we observe is completely unrelated to the target structure, half of the variance _is_ related to the target.
+ 2. Additionally, each of the three dimensions of signal is repeated across multiple voxels. This means that while the noise is uncorrelated between voxels, the signal is _correlated_ between voxels. This is true of this simulation, and also has some truth in many real datasets.
+ 
+To highlight this second point, we will first compute the correlation matrix *among voxels*. 
+
+```{r}
+r <- cor(X)
+dim(r)
+```
+
+Then we will decompose that correlation matrix into its eigenvalues and eigenvectors.
+
+```{r}
+e <- eigen(r)
+str(e)
+```
+
+The eigenvectors are essentially principal components: they are all orthogonal.
+
+::: {.callout-note}
+Two vectors are orthogonal when they are perpendicular to each other. This is hard to envision in more than two dimensions. However, for any pair of orthogonal vectors, their _dot product_ is zero.
+
+We know the vectors $<1, 0>$ and $<0, 1>$ are orthogonal.
+
+```{r}
+a <- c(x = 1, y = 0)
+b <- c(x = 0, y = 1)
+plot(0, type = "n", xlim = c(-2, 2), ylim = c(-2, 2), xlab = "", ylab = "")
+abline(v = 0, h = 0)
+arrows(
+    x0 = c(0, 0),
+    y0 = c(0, 0),
+    x1 = c(a["x"], b["x"]),
+    y1 = c(a["y"], b["y"]),
+    lwd = 3
+)
+
+```
+
+The dot product is the sum of elementwise products between the vectors:
+
+```{r}
+unname((a[1] * b[1]) + (a[2] * b[2]))
+sum(a * b)
+```
+
+If those vectors are represented as matrices, we can formulate this slightly differently.
+
+```{r}
+A <- matrix(a, nrow = 2, ncol = 1) 
+B <- matrix(b, nrow = 2, ncol = 1)
+list(A = A, B = B)
+```
+
+Notice that each matrix is a "column vector": because it is a matrix the vector could be expressed as rows or columns, and that matters when doing operations with other matrices. When taking the dot product of two matrices, each row in the first matrix is multiplied with each column of the second matrix, and these products are summed. If we want to use matrix operations to take the dot product between these two matrices, we will need to transpose one or the other of them.
+
+```{r}
+t(A) %*% B
+```
+
+If we combine `A` and `B` into a single $2 \times 2$ matrix `C`, we can multiply it with itself.
+
+```{r}
+C <- cbind(A = A, B = B)
+t(C) %*% C
+```
+
+This is the matrix cross product, and can be expressed in R simply as:
+
+```{r}
+crossprod(C)
+```
+
+We see this produces a symmetric matrix, indicating that A and B are orthogonal (because their dot products are zero).
+
+This is all build up to showing that the cross product of the matrix of eigenvectors (each eigenvector is a column in this matrix) produces a matrix with ones along the diagonal and zeros everywhere else, proving that they are orthogonal. In the following, I compute the cross product of the first 10 eigenvectors to constrain the output, this is true for all pairs of vectors.
+
+```{r}
+crossprod(e$vectors[, 1:10]) |> knitr::kable(digits = 2)
+```
+
+:::
+
+The eigenvectors are ordered from most to least "important", where importance is determined by the proportion of variance it explains in the correlation matrix. This "importance" is captured by the eigenvalues, which we can plot below:
+
+```{r}
+plot(e$values, xlab = "eigenvalues")
+```
+
+The first three eigenvalues clearly separate from the 57. A principal components analysis would show that the first 30 voxels load on these three components, while the latter 30 voxels do not.
+
+In summary, we have a matrix `X` of simulated fMRI data, containing some structure
 
 Now, we can define the target representational similarity matrix (RSM) as the pairwise correlations among items. The correlation between two items is defined as their shared variability in 3D space.
 
@@ -244,15 +345,15 @@ std_dist(y)
 ```
 
 ```{r }
-lt <- lower.tri(y)
-cor(dist(x[, 1]), cor(t(X[, seq(1, 30, by = 3)]))[lt])
-
-
-X1d <- map(seq(1, 30, by = 3), ~ c(dist(X[, .x]))) |>
-    do.call(rbind, args = _) |>
-    colMeans()
-
-cor(dist(x[, 1]), X1d)
+#lt <- lower.tri(y)
+#cor(dist(x[, 1]), cor(t(X[, seq(1, 30, by = 3)]))[lt])
+#
+#
+#X1d <- map(seq(1, 30, by = 3), ~ c(dist(X[, .x]))) |>
+#    do.call(rbind, args = _) |>
+#    colMeans()
+#
+#cor(dist(x[, 1]), X1d)
 
 ```
 

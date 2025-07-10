@@ -129,7 +129,9 @@ d |>
 ```
 
 
-::: {.callout-note}
+::: {.callout-note collapse="true"}
+## Euclidean distance conveys different structure
+
 Notice that the Euclidean distances among items do not convey the same structure as the matrices above:
 
 ```{r correlation matrix}
@@ -168,7 +170,16 @@ While similarity and dissimilarity matrices have some important differences when
 
 ## First example
 
-Let's simulate some data to make things more concrete. First, I will generate the "true structure": three independent dimensions of variability that characterize 100 items.
+Let's simulate some data to make things more concrete. 
+
+
+### Simulating stimulus structure
+
+We are going to simulate an experiment where there are 100 stimuli, and the relationships among those stimuli express a graded similarity structure. The expectation is that the neural representations of these stimuli will express this similarity structure
+
+The motivation for RSA is that the stimuli 
+
+First, I will generate the "true structure": three independent dimensions of variability that characterize 100 items.
 
 ```{r E1 true signal}
 x <- matrix(
@@ -184,9 +195,17 @@ x <- matrix(
 print(x[1:10, ])
 ```
 
-::: {.callout-note}
-How can three random vectors be "structure"? While it is true that there is no interesting topology to the 100 points, they are still 100 points in space, each with some similarity/distance relative to every other point. As long as these positions are systematic, in that different attempts to measure these points will result in them being positioned similarly in space, that's all we need in order to say there is structure.
+
+::: {.callout-note collapse="true"}
+## How can three random vectors be "structure"?
+
+While it is true that there is no interesting topology to the 100 points, they are still 100 points in space, each with some similarity/distance relative to every other point. As long as these positions are systematic, in that different attempts to measure these points will result in them being positioned similarly in space, that's all we need in order to say there is structure.
 :::
+
+Now, we can define the target representational similarity matrix (RSM) as the pairwise correlations among items. The correlation between two items is defined as their shared variability in 3D space.
+
+
+### Simulating fMRI data
 
 The true 3D-structure will be a part of the matrices to which we will apply RSA. First, we'll create some "MRI data" by:
 
@@ -204,7 +223,9 @@ X <- cbind(xe, E)
 print(dim(X))
 ```
 
-::: {.callout-warning}
+::: {.callout-warning collapse="true"}
+## Implicit R trickery
+
 In the code above, I leverage the facts that `R` will recycle the shorter vector to match the longer one (assuming the length of the longer one is multiple of the shorter one) and that matrices are populated one column at a time by default. For example:
 
 ```{r matrix columnwise population}
@@ -243,7 +264,9 @@ str(e)
 
 The eigenvectors are essentially principal components: they are all orthogonal.
 
-::: {.callout-note}
+::: {.callout-note collapse="true"}
+## Orthogonality and the dot product
+
 Two vectors are orthogonal when they are perpendicular to each other. This is hard to envision in more than two dimensions. However, for any pair of orthogonal vectors, their _dot product_ is zero.
 
 We know the vectors $<1, 0>$ and $<0, 1>$ are orthogonal.
@@ -313,19 +336,18 @@ The eigenvectors are ordered from most to least "important", where importance is
 plot(e$values, xlab = "eigenvalues")
 ```
 
-The first three eigenvalues clearly separate from the 57. A principal components analysis would show that the first 30 voxels load on these three components, while the latter 30 voxels do not.
+The first three eigenvalues clearly separate from the latter 57. A principal components analysis would show that the first 30 voxels load on these three components, while the latter 30 voxels do not.
 
-In summary, we have a matrix `X` of simulated fMRI data, containing some structure
-
-Now, we can define the target representational similarity matrix (RSM) as the pairwise correlations among items. The correlation between two items is defined as their shared variability in 3D space.
+In summary, we have a matrix `X` of simulated fMRI data.
 
 ```{r }
 y <- cor(t(x))
 ```
 
 
-::: {.callout-note}
-Just to drive home the consequence of this decision to use correlation, rather than say Euclidean distance, consider the following:
+::: {.callout-note collapse="true"}
+## Euclidean distance vs correlation distance 
+Just to drive home the consequence of this decision to use correlation rather than, say, Euclidean distance, consider the following:
 
 ```{r }
 cor_dist <- function(x) {

@@ -75,7 +75,7 @@ matrices <- list(
 )
 ```
 
-Why all three of these? Purely for the sake of comparing them in the context of this demonstration. In a real analysis, you will want to think ahead of time about which metric makes most sense for your use case and question.
+Why all five of these? Purely for the sake of comparing them in the context of this demonstration. In a real analysis, you will want to think ahead of time about which metric makes most sense for your use case and question.
 
 Euclidean distance is computed relative to the points as they are provided. There is no scaling at all.
 

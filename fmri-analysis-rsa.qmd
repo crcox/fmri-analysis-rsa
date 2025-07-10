@@ -323,6 +323,8 @@ Now, we can define the target representational similarity matrix (RSM) as the pa
 y <- cor(t(x))
 ```
 
+
+::: {.callout-note}
 Just to drive home the consequence of this decision to use correlation, rather than say Euclidean distance, consider the following:
 
 ```{r }
@@ -339,10 +341,15 @@ y <- rbind(
     B = c(-3, -1, -2),
     C = c( 0,  1,  1)
 )
+print(y)
 cor_dist(t(y))
 std_dist(y)
 
 ```
+
+Notice that `A` and `B` have a correlation distance $0$, meaning they are perfectly correlated, but have a (standardized) distance of 1 (meaning this is that largest of the three distances between vectors `A`, `B`, and `C`).
+:::
+
 
 ```{r }
 #lt <- lower.tri(y)
@@ -354,8 +361,8 @@ std_dist(y)
 #    colMeans()
 #
 #cor(dist(x[, 1]), X1d)
-
 ```
+
 
 RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triangle similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
 

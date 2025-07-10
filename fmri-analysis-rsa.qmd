@@ -13,7 +13,7 @@ nocite: |
 
 ## What is Representational Similarity Analysis (RSA)?
 
-There are many very good papers written about the logic, strengths, and weaknesses of RSA. It is worth digging into them. One of may many languishing projects writing another paper in this vein...
+There are many very good papers written about the logic, strengths, and weaknesses of RSA. It is worth digging into them. I have included a short list at the end of this document. One of may many languishing projects is writing another paper in this vein...
 
 RSA boils down to a comparison of similarity or dissimilarity (i.e., distance) matrices. Similarity (and dissimilarity) matrices are *symmetric*, meaning that `x[i,j] == x[j,i]` is `TRUE` for all `i` and `j`. All values along the *diagonal* of a dissimilarity matrix (i.e., whenever `i==j`) will be zero. For similarity matrices useful for RSA, such as correlation matrices or cosine similarity matrices, the diagonal values will always be one.[^covariance]
 
@@ -22,7 +22,7 @@ RSA boils down to a comparison of similarity or dissimilarity (i.e., distance) m
 
 ### Exploring similarity and distance matrices
 
-Let's load some packages and a selection of data packaged with R that to utilize for a demonstration:
+Let's load some packages ...
 
 ```{r generate symmetric matrices}
 library(dplyr, warn.conflicts = FALSE)
@@ -30,14 +30,29 @@ library(purrr)
 library(tibble)
 library(tidyr)
 library(ggplot2)
-
-data("mtcars")
-x <-  mtcars[, c(1,3,4,5,6,7)]
-knitr::kable(x, digits = 1)
+library(coop)
 ```
 
+::: {.callout-note}
+The [`coop`](https://cran.r-project.org/web/packages/coop/readme/README.html) package provides efficient implementations of covariance, correlation, and cosine similarity.
+:::
 
-I add a little noise to the data to reduce the similarity among items. Then I compute three matrices: a correlation _similarity_ matrix, a correlation _distance_ matrix (i.e., dissimilarity), and a Euclidean distance matrix.
+... and a selection of data packaged with R to utilize for a demonstration:
+
+```{r}
+data("mtcars")
+x <-  mtcars[, c(1,3,4,5,6,7)]
+```
+
+::: {.callout-note collapse="true"}
+#### View dataset
+
+```{r}
+knitr::kable(x, digits = 1)
+```
+:::
+
+I generate a new matrix of random values (`e`) to add to this data to reduce the similarity among items.
 
 ```{r}
 e <- matrix(
@@ -46,12 +61,29 @@ e <- matrix(
     ncol = ncol(x),
     byrow = TRUE
 )
+```
+
+Then I compute five matrices: a correlation _similarity_ matrix, a correlation _distance_ matrix (i.e., dissimilarity), a *cosine* similarity matrix, a *cosine* distance matrix, and a Euclidean distance matrix.
+
+```{r similarity mats}
 matrices <- list(
-    similarity = cor(t(x + e)),
-    dissimilar = (2 - (cor(t(x + e)) + 1)) / 2,
-    distance = as.matrix(dist(x + e))
+    correl_similarity = cor(t(x + e)),
+    correl_dissimilar = (2 - (cor(t(x + e)) + 1)) / 2,
+    cosine_similarity = coop::cosine(t(x + e)),
+    cosine_dissimilar = (2 - (coop::cosine(t(x + e)) + 1)) / 2,
+    euclid_distance = as.matrix(dist(x + e))
 )
 ```
+
+Why all three of these? Purely for the sake of comparing them in the context of this demonstration. In a real analysis, you will want to think ahead of time about which metric makes most sense for your use case and question.
+
+Euclidean distance is computed relative to the points as they are provided. There is no scaling at all.
+
+With cosine distance (and similarity), you can think of all the points as defining a *direction* away from the origin. The distances from the origin themselves are not important, just the angle between the rays that pass through each pair of points. In other words, cosine distance is invariant to scale. You could multiply the vector defining the point for each item by some different random number and the cosine similarity would not change.
+
+With correlation distance (and similarity), you subtract the mean and then divide by the standard deviation of the vector for each item. This means that correlation distance will not be affected by multiplying or adding a value to each item-vector.
+
+Because cosine and correlation "distance" are invariant to scale, these are sometimes referred to a dissimilarities rather than distances.
 
 To plot these matrices with `ggplot`, I will represent them as `tibble`s (which are just `data.frame`s with some conveniences baked in):
 
@@ -69,10 +101,18 @@ d <- map(matrices, ~ {
     mutate(
         metric = factor(
             metric,
-            levels = c("similarity", "dissimilar", "distance"),
+            levels = c(
+                "correl_similarity",
+                "correl_dissimilar",
+                "cosine_similarity",
+                "cosine_dissimilar",
+                "euclid_distance"
+            ),
             labels = c(
-                "correlation (similarity)",
+                "correlation similarity",
                 "correlation distance",
+                "cosine similarity",
+                "cosine distance",
                 "Euclidean distance"
             )
         ),
@@ -83,10 +123,10 @@ d <- map(matrices, ~ {
 I will also define a logical matrix that can be used as a filter to select the lower triangle of each of these matrices as:
 
 ```{r lower triangle}
-lt <- lower.tri(matrices$similarity)
+lt <- lower.tri(matrices$cosine_similarity)
 ```
 
-Now I will plot the correlation similarity and distance matrices:
+Now I will plot the correlation and cosine similarity and distance matrices:
 
 ```{r plot similarity/dissimilarity matrices}
 d |>
@@ -106,7 +146,17 @@ d |>
 Notice that the two express the same patterns of similarity, but inverted and on different scales. Indeed, the correlation between the lower triangles of the two matrices is -1:
 
 ```{r correlation}
-cor(matrices$similarity[lt], matrices$dissimilar[lt])
+cor(matrices$correl_similarity[lt], matrices$correl_dissimilar[lt])
+```
+
+```{r cosine}
+cor(matrices$cosine_similarity[lt], matrices$cosine_dissimilar[lt])
+```
+
+Also note that correlation similarity and 
+
+```{r cosine correl}
+cor(matrices$correl_similarity[lt], matrices$cosine_similarity[lt])
 ```
 
 Distances cannot be negative, so 0 is the bottom of the scale for the correlation distance matrix.
@@ -115,10 +165,12 @@ Now I will plot the Euclidean distance:
 
 ```{r plot distance matrix}
 d |>
-    filter(metric == "Euclidean distance") |>
+    filter(metric %in% c("cosine distance", "Euclidean distance")) |>
+    group_by(metric) |>
+    mutate(value = value / max(value)) |>
     ggplot(aes(x = carA, y = carB, fill = value)) +
         geom_raster() +
-        scale_fill_gradient() +
+        scale_fill_gradient2() +
         theme(
             axis.title.y = element_blank(),
             axis.title.x = element_blank(),
@@ -132,7 +184,7 @@ d |>
 ::: {.callout-note collapse="true"}
 ## Euclidean distance conveys different structure
 
-Notice that the Euclidean distances among items do not convey the same structure as the matrices above:
+Notice that the Euclidean distances among items do not convey structure similar to the matrices above:
 
 ```{r correlation matrix}
 imap(matrices, ~ tibble(.y := .x[lt])) |>
@@ -154,13 +206,23 @@ First, notice that the correlation subtracts the mean from each vector. While it
 
 $$
 \begin{align}
-\textrm{Pearson's } r &= \frac{\sum z(x)_i-z(y)_i}{n-1} \\
+\textrm{Pearson's } r &= \frac{\sum z(x)_i - z(y)_i}{n-1} \\
 z(a)_i &= \frac{a_i - \bar{a}}{s(a)} \\
 s(a) &= \sqrt{\frac{\sum a_i - \bar{a}}{n-1}}
 \end{align}
 $$
 
-In other words, each variable is also standardized so that the vectors being correlated both have standard deviation equal to one (i.e., "unit variance"). It is important to consider what structure and relationships are being emphasized by the choice of similarity or distance metric.
+In other words, each variable is also standardized so that the vectors being correlated both have standard deviation equal to one (i.e., "unit variance").
+
+The cosine similarity is defined as:
+
+$$
+\textrm{Cosine Sim.} = \frac{\sum x_i y_i}{\sqrt{\sum x_i^2} \sqrt{\sum y_i^2}}
+$$
+
+In this equation, notice that $\sqrt{\sum x_i^2}$ is the Euclidean distance from the point defined by the vector $x$ to the origin (i.e., the *magnitude* of the vector), and likewise for $\sqrt{\sum y_i^2}$. So the denominator is the product of the distances from the origin, and so the equation standardizes with respect to distance from the origin. The numerator is the dot product of the vectors $x$ and $y$. For now, it suffices to know that when the dot product of two vectors is zero, then the vectors are orthogonal. So the cosine similarity is zero when the vectors are orthogonal. If not for the denominator, the dot product could be infinitely large or small, but in the context of the denominator the minimum and maximum values this equation can yield are -1 and 1.
+
+It is important to consider what structure and relationships are being emphasized by the choice of similarity or distance metric.
 
 :::
 
@@ -170,16 +232,20 @@ While similarity and dissimilarity matrices have some important differences when
 
 ## First example
 
-Let's simulate some data to make things more concrete. 
-
 
 ### Simulating stimulus structure
 
-We are going to simulate an experiment where there are 100 stimuli, and the relationships among those stimuli express a graded similarity structure. The expectation is that the neural representations of these stimuli will express this similarity structure
+We are going to simulate an experiment where there are 100 stimuli. A study designed with the intention of applying RSA will typically be asking a question something like: "are there neural representations that express the similarity among these stimuli?". The linking hypothesis between the cognitive scientific and the neuroscientific side of things is that patterns of activity in the brain related to concept representation will be more similar when the concepts are more similar, and vice versa.
 
-The motivation for RSA is that the stimuli 
+For the purpose of the simulation, we do not need to care what the concepts are. We just need to define how they relate to each other. One easy way to do that is to assume that each concept maps to a point. The point can be specified in as many dimensions as you like, and each dimension can be thought of as aligning with some important axis of knowledge organization... maybe animacy, size, and dangerousness. :)
 
-First, I will generate the "true structure": three independent dimensions of variability that characterize 100 items.
+::: {.callout-note}
+#### Digression on treating animacy as graded
+
+Typically, animacy is treated as a binary, but people do tend to rate insects and fish and less animate than birds and mammals. Plants are living, but not animate, rocks are nonliving but natural, artifacts are nonliving and unnatural. There is some evidence for an "animacy continuum" in the posterior ventral temporal lobe [@Sha2015].
+:::
+
+For our simulation, let's generate 100 points in 3D space.
 
 ```{r E1 true signal}
 x <- matrix(
@@ -197,15 +263,96 @@ print(x[1:10, ])
 
 
 ::: {.callout-note collapse="true"}
-## How can three random vectors be "structure"?
+#### How can three random vectors be "structure"?
 
 While it is true that there is no interesting topology to the 100 points, they are still 100 points in space, each with some similarity/distance relative to every other point. As long as these positions are systematic, in that different attempts to measure these points will result in them being positioned similarly in space, that's all we need in order to say there is structure.
 :::
 
-Now, we can define the target representational similarity matrix (RSM) as the pairwise correlations among items. The correlation between two items is defined as their shared variability in 3D space.
+Now, we can define the target representational similarity matrix (RSM) as the pairwise cosine similarities among items.
+
+```{r }
+y <- coop::cosine(t(x))
+str(y)
+```
+
+::: {.callout-warning}
+The `t()` (transpose) function essentially rotates a matrix. It changes `x` from a $100 \times 3$ matrix to a $3 \times 100$ matrix. This is important here because `cor()` produces pairwise correlations among *columns*.
+
+Meanwhile, the `dist()` function produces pairwise distances among *rows*. This is a quirk of R built in functions that should be committed to memory.
+:::
+
+::: {.callout-note collapse="true"}
+#### Euclidean distance vs correlation distance 
+Just to drive home the consequence of this decision to use correlation rather than, say, Euclidean distance, consider the following:
+
+```{r }
+cosine_sim <- function(x) {
+    assertthat::assert_that(is.matrix(x))
+    y <- x / sqrt(rowSums(x * x))
+    tcrossprod(y)
+}
+cosine_dist <- function(x) {
+    1 - cosine_sim(x)
+}
+cor_dist <- function(x) {
+    r <- cor(x)
+    (2 - (r + 1)) / 2
+}
+std_dist <- function(x) {
+    d <- as.matrix(dist(x))
+    d / max(d)
+}
+tmp <- rbind(
+    A = c( 1,  3,  2),
+    B = c(-3, -1, -2),
+    C = c( 0,  1,  1)
+)
+print(tmp)
+cor_dist(t(tmp))
+std_dist(tmp)
+
+```
+
+Notice that `A` and `B` have a correlation distance $0$, meaning they are perfectly correlated, but have a (standardized) distance of 1 (meaning this is that largest of the three distances between vectors `A`, `B`, and `C`).
+:::
+
+
+::: {.callout-note collapse="true"}
+#### Euclidean distance vs cosine distance 
+Just to drive home the consequence of this decision to use cosine distance rather than, say, Euclidean distance, consider the following:
+
+```{r }
+cosine_dist <- function(x) {
+    d <- 1 - coop::cosine(x)
+    d / max(d)
+}
+euclidean_dist <- function(x) {
+    d <- as.matrix(dist(x))
+    d / max(d)
+}
+y1 <- rbind(
+    A = c( 1,  3,  2),
+    B = c(-3, -1, -2),
+    C = c( 0,  1,  1)
+)
+y2 <- rbind(
+    A = c( 1,  3,  2),
+    B = c(-3, -1, -2) * 10,
+    C = c( 0,  1,  1)
+)
+print(y1)
+cosine_dist(t(y1))
+euclidean_dist(y1)
+print(y2)
+cosine_dist(t(y2))
+euclidean_dist(y2)
+```
+:::
 
 
 ### Simulating fMRI data
+
+The assumption going into this simulation is that this 3D structure will be expressed in patterns of neural activity somehow. 
 
 The true 3D-structure will be a part of the matrices to which we will apply RSA. First, we'll create some "MRI data" by:
 
@@ -224,7 +371,7 @@ print(dim(X))
 ```
 
 ::: {.callout-warning collapse="true"}
-## Implicit R trickery
+#### Implicit R trickery
 
 In the code above, I leverage the facts that `R` will recycle the shorter vector to match the longer one (assuming the length of the longer one is multiple of the shorter one) and that matrices are populated one column at a time by default. For example:
 
@@ -248,14 +395,14 @@ You might think that a situation where the noise has the same intensity as the s
  1. We are interested in how this structure correlates with a target structure, which means that even if half of the variance we observe is completely unrelated to the target structure, half of the variance _is_ related to the target.
  2. Additionally, each of the three dimensions of signal is repeated across multiple voxels. This means that while the noise is uncorrelated between voxels, the signal is _correlated_ between voxels. This is true of this simulation, and also has some truth in many real datasets.
  
-To highlight this second point, we will first compute the correlation matrix *among voxels*. 
+To highlight this second point, we will first compute the cosine similarity matrix *among voxels*. 
 
 ```{r}
-r <- cor(X)
+r <- coop::cosine(X)
 dim(r)
 ```
 
-Then we will decompose that correlation matrix into its eigenvalues and eigenvectors.
+Then we will decompose that similarity matrix into its eigenvalues and eigenvectors.
 
 ```{r}
 e <- eigen(r)
@@ -265,7 +412,7 @@ str(e)
 The eigenvectors are essentially principal components: they are all orthogonal.
 
 ::: {.callout-note collapse="true"}
-## Orthogonality and the dot product
+#### Orthogonality and the dot product
 
 Two vectors are orthogonal when they are perpendicular to each other. This is hard to envision in more than two dimensions. However, for any pair of orthogonal vectors, their _dot product_ is zero.
 
@@ -338,55 +485,90 @@ plot(e$values, xlab = "eigenvalues")
 
 The first three eigenvalues clearly separate from the latter 57. A principal components analysis would show that the first 30 voxels load on these three components, while the latter 30 voxels do not.
 
-In summary, we have a matrix `X` of simulated fMRI data.
+Let's now consider how the eigenvalues would look if we construct the correlation matrix based on a few subsets of voxels:
 
-```{r }
-y <- cor(t(x))
+
+### Omitting most signal carrying voxels
+
+We can see that the first three eigenvalues shrink substantially.
+
+```{r}
+r <- coop::cosine(X[, c(1:3, 31:60)])
+plot(eigen(r)$values)
+```
+
+### Omitting all voxels relevant to dimensions 2 and 3
+
+We can see that the first eigenvalue is large, but 2 and 3 are reduced substantially.
+
+```{r}
+r <- coop::cosine(X[, c(seq(1, 30, by = 3), 31:60)])
+plot(eigen(r)$values)
 ```
 
 
-::: {.callout-note collapse="true"}
-## Euclidean distance vs correlation distance 
-Just to drive home the consequence of this decision to use correlation rather than, say, Euclidean distance, consider the following:
+In summary, we have a matrix `X` of simulated fMRI data the expresses the similarity structure in `y`, but:
 
-```{r }
-cor_dist <- function(x) {
-    r <- cor(x)
-    (2 - (r + 1)) / 2
-}
-std_dist <- function(x) {
-    d <- as.matrix(dist(x))
-    d / max(d)
-}
-y <- rbind(
-    A = c( 1,  3,  2),
-    B = c(-3, -1, -2),
-    C = c( 0,  1,  1)
-)
-print(y)
-cor_dist(t(y))
-std_dist(y)
+ 1. No single voxel contains all the information needed to explain variance in `y`. `y` is the cosine similarity of points in a 3D space, and no voxel in `X` contains information about more than one of those dimensions.
+ 2. Half of the voxels carry no signal at all.
+ 3. When all 30 signal carrying voxels are considered together, the three dimensions of signal are clear in the data, but if we under-sample the signal carrying voxels the structure becomes less apparent in the cosine similarity matrix.
 
-```
-
-Notice that `A` and `B` have a correlation distance $0$, meaning they are perfectly correlated, but have a (standardized) distance of 1 (meaning this is that largest of the three distances between vectors `A`, `B`, and `C`).
-:::
-
-
-```{r }
-#lt <- lower.tri(y)
-#cor(dist(x[, 1]), cor(t(X[, seq(1, 30, by = 3)]))[lt])
-#
-#
-#X1d <- map(seq(1, 30, by = 3), ~ c(dist(X[, .x]))) |>
-#    do.call(rbind, args = _) |>
-#    colMeans()
-#
-#cor(dist(x[, 1]), X1d)
-```
-
+## Doing basic RSA
 
 RSA tests whether two similarity matrices are are more correlated than would be expected by chance given the number of observations in the lower triangle similarity among experimental items is reflected in the patterns of neural activity they are associated with [@Kriegeskorte2008].
+
+All we are doing in the following is taking the lower triangle of the target cosine similarity matrix, `y`, which I am calling `rsm` (representational similarity matrix) and correlating it with the lower triangle of a cosine similarity matrix derived from a set of voxels from the fMRI data, which I am calling `nsm` (neural similarity matrix).
+
+When doing RSA, you do not know where the signal is necessarily, and there are many more than 60 voxels. In the series of analyses below, I make different selections from the fMRI data to show how the correlation between `rsm` and `nsm` are effected.
+
+Note that the signal in this simulated fMRI dataset is MUCH stronger than in real data. Real RSA analyses typically report correlations $<.1$.
+
+Finally, I report the Pearson and Spearman correlations for each analysis. It is conventional in the RSA literature to use the Spearman (rank) correlation. This is somewhat relaxing the analysis: with Pearson's correlation, we are looking for the linear differences in similarity between pairs of items to be recovered from the neural activity. With Spearman's, we are looking for the rank order of the pairwise similarity magnitudes to be similar between the `rsm` and `nsm`.
+
+```{r }
+methods <- c("Pearson's r" = "pearson", "Spearman's Rho" = "spearman")
+lt <- lower.tri(y)
+rsm <- y[lt]
+nsm <- coop::tcosine(X)[lt]
+vapply(methods, function(m) cor(rsm, nsm, method = m), numeric(1))
+```
+
+```{r }
+lt <- lower.tri(y)
+rsm <- y[lt]
+nsm <- coop::tcosine(X[, 1:30])[lt]
+vapply(methods, function(m) cor(rsm, nsm, method = m), numeric(1))
+```
+
+```{r }
+lt <- lower.tri(y)
+rsm <- y[lt]
+nsm <- coop::tcosine(X[, seq(1, 30, by = 3)])[lt]
+vapply(methods, function(m) cor(rsm, nsm, method = m), numeric(1))
+```
+
+```{r }
+lt <- lower.tri(y)
+rsm <- y[lt]
+nsm <- coop::tcosine(X[, 1:15])[lt]
+vapply(methods, function(m) cor(rsm, nsm, method = m), numeric(1))
+```
+
+```{r }
+lt <- lower.tri(y)
+rsm <- y[lt]
+nsm <- coop::tcosine(X[, 16:60])[lt]
+vapply(methods, function(m) cor(rsm, nsm, method = m), numeric(1))
+```
+
+```{r }
+lt <- lower.tri(y)
+rsm <- y[lt]
+nsm <- coop::tcosine(X[, 28:60])[lt]
+vapply(methods, function(m) cor(rsm, nsm, method = m), numeric(1))
+```
+
+
 
 ## A short selection of papers on RSA
 ::: {#refs}
